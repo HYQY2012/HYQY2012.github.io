@@ -172,38 +172,38 @@
         const progressBar = document.getElementById('progressBar');
         const result = document.getElementById('result');
 
+        // ########## 仅修改这一行 ##########
         const GITHUB_TOKEN = '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';
         const GITHUB_OWNER = 'HYQY2012';
         const GITHUB_REPO = 'Data';
         const GITHUB_BRANCH = 'main';
 
+        // 基础校验：去除首尾空白，排除输入格式问题
         const TOKEN = GITHUB_TOKEN.trim();
-        const REQUEST_HEADERS = {
+        // 仅保留GitHub官方支持的2个核心请求头，杜绝CORS/鉴权干扰
+        const REQ_HEADERS = {
             'Authorization': 'token ' + TOKEN,
             'Accept': 'application/vnd.github.v3+json'
         };
 
         async function getNextPageNum(userFolder) {
-            const apiUrl = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + encodeURIComponent(userFolder);
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'GET',
-                    headers: REQUEST_HEADERS,
-                    mode: 'cors'
-                });
-                if (response.status === 404) return 1;
-                if (response.status === 401) throw new Error('401：Token无效/非HYQY2012账号生成');
-                if (response.status === 403) throw new Error('403：Token未勾选repo全权限');
-                if (!response.ok) throw new Error('请求失败，状态码：' + response.status);
-                const files = await response.json();
-                const pageNums = files.filter(item => item.type === 'dir' && /^page_\d+$/.test(item.name)).map(item => parseInt(item.name.split('_')[1])).filter(num => !isNaN(num) && num > 0);
-                return pageNums.length > 0 ? Math.max(...pageNums) + 1 : 1;
-            } catch (err) {
-                if (err.message.includes('net::ERR_FAILED') || err.message.includes('CORS')) throw new Error('跨域/网络错误：请检查网络或切换网络环境');
-                throw err;
-            }
+            const encodeFolder = encodeURIComponent(userFolder);
+            const apiUrl = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + encodeFolder;
+            const response = await fetch(apiUrl, {
+                method: 'GET',
+                headers: REQ_HEADERS,
+                mode: 'cors'
+            });
+            if (response.status === 404) return 1;
+            if (response.status === 401) throw new Error('Token无效/非HYQY2012账号生成/令牌已过期');
+            if (response.status === 403) throw new Error('Token未勾选repo全权限/令牌被限制');
+            if (!response.ok) throw new Error('获取目录失败：' + response.status);
+            const files = await response.json();
+            const pageNums = files.filter(item => item.type === 'dir' && /^page_\d+$/.test(item.name)).map(item => parseInt(item.name.split('_')[1])).filter(num => !isNaN(num));
+            return pageNums.length ? Math.max(...pageNums) + 1 : 1;
         }
 
+        // 标准Base64编码，兼容所有字符
         function toBase64(str) {
             return btoa(unescape(encodeURIComponent(str)));
         }
@@ -211,9 +211,11 @@
         uploadBtn.addEventListener('click', async () => {
             const userFolder = userFolderInput.value.trim().replace(/[\/\\:*?"<>|]/g, '');
             const mdContent = mdContentInput.value.trim() || '# ' + userFolder + ' - page_* \n\n这是HHAT自动生成的Markdown文件';
+
+            // 前端前置校验，提前拦截明显错误
             if (!userFolder) {
                 result.className = 'result error';
-                result.innerText = '请输入用户文件夹名称（英文/数字/下划线）';
+                result.innerText = '请输入文件夹名称（英文/数字/下划线）';
                 return;
             }
             if (userFolder.length > 20) {
@@ -223,26 +225,32 @@
             }
             if (!TOKEN || TOKEN.length < 40 || !TOKEN.startsWith('ghp_')) {
                 result.className = 'result error';
-                result.innerText = '请配置有效的PAT（ghp_开头40位）';
+                result.innerText = '请填写ghp_开头的40位有效PAT令牌';
                 return;
             }
+
+            // 初始化上传状态
             uploadBtn.disabled = true;
             progress.style.display = 'block';
             progressBar.style.width = '20%';
             result.className = 'result';
             result.innerText = '';
+
             try {
                 progressBar.style.width = '30%';
                 const nextPageNum = await getNextPageNum(userFolder);
                 const pageFolder = 'page_' + nextPageNum;
                 const filePath = userFolder + '/' + pageFolder + '/index.md';
                 progressBar.style.width = '50%';
+
                 const base64Content = toBase64(mdContent);
                 progressBar.style.width = '70%';
                 const uploadUrl = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + encodeURIComponent(filePath);
-                const uploadResponse = await fetch(uploadUrl, {
+
+                // 上传请求：与GET请求配置一致，杜绝鉴权不一致
+                const uploadRes = await fetch(uploadUrl, {
                     method: 'PUT',
-                    headers: REQUEST_HEADERS,
+                    headers: REQ_HEADERS,
                     mode: 'cors',
                     body: JSON.stringify({
                         message: 'HHAT上传：' + filePath,
@@ -250,27 +258,27 @@
                         branch: GITHUB_BRANCH
                     })
                 });
-                const data = await uploadResponse.json();
-                if (uploadResponse.ok) {
+
+                const data = await uploadRes.json();
+                if (uploadRes.ok) {
                     progressBar.style.width = '100%';
                     result.className = 'result success';
                     result.innerText = '上传成功！\n文件路径：' + filePath + '\n访问链接：' + data.content.html_url;
                     userFolderInput.value = '';
                     mdContentInput.value = '';
                 } else {
-                    throw new Error(data.message || '上传失败：' + uploadResponse.statusText);
+                    throw new Error(data.message || '上传失败：' + uploadRes.statusText);
                 }
             } catch (err) {
                 result.className = 'result error';
                 result.innerText = err.message;
             } finally {
                 uploadBtn.disabled = false;
-                setTimeout(() => {
-                    progress.style.display = 'none';
-                }, 800);
+                setTimeout(() => { progress.style.display = 'none'; }, 800);
             }
         });
 
+        // 输入框清空错误提示
         [userFolderInput, mdContentInput].forEach(input => {
             input.addEventListener('input', () => {
                 result.innerText = '';
