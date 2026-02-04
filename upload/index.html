@@ -150,7 +150,7 @@
         <h2>HHAT <span>文件上传</span></h2>
         <div class="form-item">
             <label for="userFolder">用户文件夹名称（一级目录）</label>
-            <input type="text" id="userFolder" placeholder="请输入英文/数字/下划线，如：user1、test123">
+            <input type="text" id="userFolder" placeholder="仅支持英文/数字/下划线，如：user1、test123">
         </div>
         <div class="form-item">
             <label for="mdContent">index.md 内容编辑</label>
@@ -161,7 +161,7 @@
         </div>
         <button class="upload-btn" id="uploadBtn">上传至 GitHub /HYQY2012/Data</button>
         <div class="result" id="result"></div>
-        <p class="tip">上传路径：用户文件夹 → page_n → index.md<br>自动生成自增page_n，支持Markdown语法<br>仅支持英文/数字/下划线，避免中文异常</p>
+        <p class="tip">上传路径：用户文件夹 → page_n → index.md<br>自动生成自增page_n，支持Markdown语法<br>禁止输入中文/特殊字符，输入将自动过滤</p>
     </div>
 
     <script>
@@ -181,6 +181,17 @@
         const REQ_HEADERS = {
             'Authorization': 'token ' + TOKEN,
             'Accept': 'application/vnd.github.v3+json'
+        };
+
+        userFolderInput.oninput = function() {
+            this.value = this.value.replace(/[^\w_]/g, '');
+            result.innerText = '';
+            result.className = 'result';
+        };
+
+        mdContentInput.oninput = function() {
+            result.innerText = '';
+            result.className = 'result';
         };
 
         async function getNextPageNum(userFolder) {
@@ -228,7 +239,7 @@
             progress.style.display = 'block';
             progressBar.style.width = '20%';
 
-            const userFolder = userFolderInput.value.trim().replace(/[\/\\:*?"<>|]/g, '');
+            const userFolder = userFolderInput.value.trim();
             let mdContent = mdContentInput.value.trim();
             if (!mdContent) mdContent = `# ${userFolder}\n这是自动生成的Markdown文件`;
 
@@ -294,13 +305,6 @@
                 }, 800);
             }
         };
-
-        [userFolderInput, mdContentInput].forEach(input => {
-            input.oninput = function() {
-                result.innerText = '';
-                result.className = 'result';
-            };
-        });
     </script>
 </body>
 </html>
