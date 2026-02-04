@@ -179,7 +179,7 @@
 
         const TOKEN = GITHUB_TOKEN.trim();
         const REQ_HEADERS = {
-            'Authorization': 'token ' + TOKEN,
+            'Authorization': 'Bearer ' + TOKEN,
             'Accept': 'application/vnd.github.v3+json'
         };
 
@@ -197,33 +197,26 @@
         async function getNextPageNum(userFolder) {
             const encodeFolder = encodeURIComponent(userFolder);
             const apiUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${encodeFolder}`;
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'GET',
-                    headers: REQ_HEADERS,
-                    mode: 'cors',
-                    credentials: 'omit'
-                });
-                if (response.status === 404) return 1;
-                if (!response.ok) throw new Error(`获取目录失败，状态码：${response.status}`);
-                const files = await response.json();
-                const pageNums = files.filter(item => 
-                    item.type === 'dir' && /^page_\d+$/.test(item.name)
-                ).map(item => 
-                    parseInt(item.name.split('_')[1])
-                ).filter(num => !isNaN(num));
-                return pageNums.length ? Math.max(...pageNums) + 1 : 1;
-            } catch (err) {
-                throw new Error(`获取页码失败：${err.message}`);
-            }
+            const response = await fetch(apiUrl, {
+                method: 'GET',
+                headers: REQ_HEADERS,
+                mode: 'cors',
+                credentials: 'omit',
+                cache: 'no-store'
+            });
+            if (response.status === 404) return 1;
+            if (!response.ok) throw new Error(`获取目录失败：${response.status}`);
+            const files = await response.json();
+            const pageNums = files.filter(item => 
+                item.type === 'dir' && /^page_\d+$/.test(item.name)
+            ).map(item => 
+                parseInt(item.name.split('_')[1])
+            ).filter(num => !isNaN(num));
+            return pageNums.length ? Math.max(...pageNums) + 1 : 1;
         }
 
         function toBase64(str) {
-            try {
-                return btoa(unescape(encodeURIComponent(str || '')));
-            } catch (e) {
-                throw new Error('内容编码失败，请勿使用特殊字符');
-            }
+            return btoa(unescape(encodeURIComponent(str || '')));
         }
 
         function resetUploadState() {
@@ -279,6 +272,7 @@
                     headers: REQ_HEADERS,
                     mode: 'cors',
                     credentials: 'omit',
+                    cache: 'no-store',
                     body: JSON.stringify({
                         message: `HHAT上传：${filePath}`,
                         content: base64Content,
@@ -294,7 +288,7 @@
                     userFolderInput.value = '';
                     mdContentInput.value = '';
                 } else {
-                    throw new Error(data.message || `上传失败，状态码：${uploadRes.status}`);
+                    throw new Error(data.message || `上传失败：${uploadRes.status}`);
                 }
             } catch (err) {
                 result.className = 'result error';
