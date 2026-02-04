@@ -67,6 +67,7 @@
             border: 1px solid #eee;
             border-radius: 10px;
             font-size: 14px;
+            font-weight: 400;
             outline: none;
             resize: vertical;
             transition: border 0.3s ease;
@@ -150,7 +151,7 @@
         <h2>HHAT <span>文件上传</span></h2>
         <div class="form-item">
             <label for="userFolder">用户文件夹名称（一级目录）</label>
-            <input type="text" id="userFolder" placeholder="请输入文件夹名称，如：user1、test（建议英文/数字）">
+            <input type="text" id="userFolder" placeholder="请输入英文/数字，如：user1、test123">
         </div>
         <div class="form-item">
             <label for="mdContent">index.md 内容编辑</label>
@@ -161,7 +162,7 @@
         </div>
         <button class="upload-btn" id="uploadBtn">上传至 GitHub /HYQY2012/Data</button>
         <div class="result" id="result"></div>
-        <p class="tip">上传路径：用户文件夹 → page_n → index.md<br>自动生成自增page_n，支持Markdown语法<br>建议文件夹名称用英文/数字/下划线，避免中文异常</p>
+        <p class="tip">上传路径：用户文件夹 → page_n → index.md<br>自动生成自增page_n，仅支持英文/数字文件夹<br>Token需为HYQY2012账号的ghp_开头40位Classic PAT</p>
     </div>
 
     <script>
@@ -172,7 +173,7 @@
         const progressBar = document.getElementById('progressBar');
         const result = document.getElementById('result');
 
-        const GITHUB_TOKEN = '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';
+        const GITHUB_TOKEN = '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';
         const GITHUB_OWNER = 'HYQY2012';
         const GITHUB_REPO = 'Data';
         const GITHUB_BRANCH = 'main';
@@ -184,35 +185,43 @@
         };
 
         async function getNextPageNum(userFolder) {
-            let encodeFolder = encodeURIComponent(userFolder);
-            encodeFolder = encodeFolder.replace(/%20/g, '+');
-            const apiUrl = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + encodeFolder;
-            const response = await fetch(apiUrl, {
-                method: 'GET',
-                headers: REQ_HEADERS,
-                mode: 'cors',
-                credentials: 'omit'
-            });
+            let apiUrl = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + encodeURIComponent(userFolder);
+            let response = null;
+            try {
+                response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: REQ_HEADERS,
+                    mode: 'cors',
+                    credentials: 'omit',
+                    redirect: 'follow'
+                });
+            } catch (err) {
+                throw new Error('网络请求失败：请检查网络/关闭代理插件');
+            }
             if (response.status === 404) return 1;
-            if (response.status === 401) throw new Error('401鉴权失败：Token无效/非HYQY2012账号/令牌过期/前后有空格');
-            if (response.status === 403) throw new Error('403权限拒绝：Token未勾选repo全权限/令牌被限制');
-            if (!response.ok) throw new Error('请求失败，状态码：' + response.status);
+            if (response.status === 401) throw new Error('401：Token无效/非HYQY2012账号/令牌过期');
+            if (response.status === 403) throw new Error('403：Token未勾选repo全权限/被限制');
+            if (!response.ok) throw new Error('获取目录失败，状态码：' + response.status);
             const files = await response.json();
             const pageNums = files.filter(item => item.type === 'dir' && /^page_\d+$/.test(item.name)).map(item => parseInt(item.name.split('_')[1])).filter(num => !isNaN(num));
             return pageNums.length ? Math.max(...pageNums) + 1 : 1;
         }
 
         function toBase64(str) {
-            return btoa(unescape(encodeURIComponent(str)));
+            try {
+                return btoa(unescape(encodeURIComponent(str)));
+            } catch (e) {
+                throw new Error('内容编码失败，请勿使用特殊字符');
+            }
         }
 
-        uploadBtn.addEventListener('click', async () => {
-            const userFolder = userFolderInput.value.trim().replace(/[\/\\:*?"<>|]/g, '');
+        uploadBtn.onclick = async function() {
+            const userFolder = userFolderInput.value.trim().replace(/[\/\\:*?"<>|\\u4e00-\\u9fa5]/g, '');
             const mdContent = mdContentInput.value.trim() || '# ' + userFolder + ' - page_* \n\n这是HHAT自动生成的Markdown文件';
 
             if (!userFolder) {
                 result.className = 'result error';
-                result.innerText = '请输入文件夹名称（英文/数字/下划线）';
+                result.innerText = '请输入文件夹名称（仅英文/数字/下划线）';
                 return;
             }
             if (userFolder.length > 20) {
@@ -222,7 +231,7 @@
             }
             if (!TOKEN || TOKEN.length !== 40 || !TOKEN.startsWith('ghp_')) {
                 result.className = 'result error';
-                result.innerText = '请配置有效PAT：ghp_开头，严格40位字符';
+                result.innerText = 'Token格式错误：ghp_开头，严格40位字符';
                 return;
             }
 
@@ -244,7 +253,7 @@
                 progressBar.style.width = '70%';
                 const uploadUrl = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + filePath;
 
-                const uploadRes = await fetch(uploadUrl, {
+                let uploadRes = await fetch(uploadUrl, {
                     method: 'PUT',
                     headers: REQ_HEADERS,
                     mode: 'cors',
@@ -271,15 +280,17 @@
                 result.innerText = err.message;
             } finally {
                 uploadBtn.disabled = false;
-                setTimeout(() => { progress.style.display = 'none'; }, 800);
+                setTimeout(() => {
+                    progress.style.display = 'none';
+                }, 800);
             }
-        });
+        };
 
         [userFolderInput, mdContentInput].forEach(input => {
-            input.addEventListener('input', () => {
+            input.oninput = function() {
                 result.innerText = '';
                 result.className = 'result';
-            });
+            };
         });
     </script>
 </body>
