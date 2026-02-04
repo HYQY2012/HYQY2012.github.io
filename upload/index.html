@@ -150,7 +150,7 @@
         <h2>HHAT <span>文件上传</span></h2>
         <div class="form-item">
             <label for="userFolder">用户文件夹名称（一级目录）</label>
-            <input type="text" id="userFolder" placeholder="仅支持英文/数字/下划线，如：user1、test123">
+            <input type="text" id="userFolder" placeholder="仅支持英文/数字/下划线，如：user1、888">
         </div>
         <div class="form-item">
             <label for="mdContent">index.md 内容编辑</label>
@@ -194,27 +194,6 @@
             result.className = 'result';
         };
 
-        async function getNextPageNum(userFolder) {
-            const encodeFolder = encodeURIComponent(userFolder);
-            const apiUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${encodeFolder}`;
-            const response = await fetch(apiUrl, {
-                method: 'GET',
-                headers: REQ_HEADERS,
-                mode: 'cors',
-                credentials: 'omit',
-                cache: 'no-store'
-            });
-            if (response.status === 404) return 1;
-            if (!response.ok) throw new Error(`获取目录失败：${response.status}`);
-            const files = await response.json();
-            const pageNums = files.filter(item => 
-                item.type === 'dir' && /^page_\d+$/.test(item.name)
-            ).map(item => 
-                parseInt(item.name.split('_')[1])
-            ).filter(num => !isNaN(num));
-            return pageNums.length ? Math.max(...pageNums) + 1 : 1;
-        }
-
         function toBase64(str) {
             return btoa(unescape(encodeURIComponent(str || '')));
         }
@@ -256,16 +235,49 @@
             }
 
             try {
-                progressBar.style.width = '30%';
-                const nextPageNum = await getNextPageNum(userFolder);
-                const pageFolder = `page_${nextPageNum}`;
-                progressBar.style.width = '50%';
+                progressBar.style.width = '40%';
+                const repoCheckUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`;
+                const repoRes = await fetch(repoCheckUrl, {
+                    method: 'GET',
+                    headers: REQ_HEADERS,
+                    mode: 'cors',
+                    credentials: 'omit',
+                    cache: 'no-store'
+                });
 
-                const base64Content = toBase64(mdContent);
-                progressBar.style.width = '70%';
+                if (!repoRes.ok) throw new Error(`仓库连接失败：${repoRes.status}`);
+                
+                progressBar.style.width = '60%';
+                let nextPageNum = 1;
+                const encodeFolder = encodeURIComponent(userFolder);
+                const dirUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${encodeFolder}`;
+                try {
+                    const dirRes = await fetch(dirUrl, {
+                        method: 'GET',
+                        headers: REQ_HEADERS,
+                        mode: 'cors',
+                        credentials: 'omit',
+                        cache: 'no-store'
+                    });
+                    if (dirRes.ok) {
+                        const files = await dirRes.json();
+                        const pageNums = files.filter(item => 
+                            item.type === 'dir' && /^page_\d+$/.test(item.name)
+                        ).map(item => 
+                            parseInt(item.name.split('_')[1])
+                        ).filter(num => !isNaN(num));
+                        if (pageNums.length) nextPageNum = Math.max(...pageNums) + 1;
+                    }
+                } catch (e) {
+                    nextPageNum = 1;
+                }
+
+                progressBar.style.width = '80%';
+                const pageFolder = `page_${nextPageNum}`;
                 const filePath = `${userFolder}/${pageFolder}/index.md`;
                 const encodeFilePath = encodeURIComponent(filePath);
                 const uploadUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${encodeFilePath}`;
+                const base64Content = toBase64(mdContent);
 
                 const uploadRes = await fetch(uploadUrl, {
                     method: 'PUT',
