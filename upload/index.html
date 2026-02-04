@@ -150,7 +150,7 @@
         <h2>HHAT <span>文件上传</span></h2>
         <div class="form-item">
             <label for="userFolder">用户文件夹名称（一级目录）</label>
-            <input type="text" id="userFolder" placeholder="请输入文件夹名称，如：user1、test">
+            <input type="text" id="userFolder" placeholder="请输入文件夹名称，如：user1、test（建议英文/数字）">
         </div>
         <div class="form-item">
             <label for="mdContent">index.md 内容编辑</label>
@@ -161,7 +161,7 @@
         </div>
         <button class="upload-btn" id="uploadBtn">上传至 GitHub /HYQY2012/Data</button>
         <div class="result" id="result"></div>
-        <p class="tip">上传路径：用户文件夹 → page_n → index.md<br>自动生成自增page_n，支持Markdown语法</p>
+        <p class="tip">上传路径：用户文件夹 → page_n → index.md<br>自动生成自增page_n，支持Markdown语法<br>建议文件夹名称用英文/数字/下划线，避免中文异常</p>
     </div>
 
     <script>
@@ -172,38 +172,36 @@
         const progressBar = document.getElementById('progressBar');
         const result = document.getElementById('result');
 
-        // ########## 仅修改这一行 ##########
         const GITHUB_TOKEN = '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';
         const GITHUB_OWNER = 'HYQY2012';
         const GITHUB_REPO = 'Data';
         const GITHUB_BRANCH = 'main';
 
-        // 基础校验：去除首尾空白，排除输入格式问题
         const TOKEN = GITHUB_TOKEN.trim();
-        // 仅保留GitHub官方支持的2个核心请求头，杜绝CORS/鉴权干扰
         const REQ_HEADERS = {
             'Authorization': 'token ' + TOKEN,
             'Accept': 'application/vnd.github.v3+json'
         };
 
         async function getNextPageNum(userFolder) {
-            const encodeFolder = encodeURIComponent(userFolder);
+            let encodeFolder = encodeURIComponent(userFolder);
+            encodeFolder = encodeFolder.replace(/%20/g, '+');
             const apiUrl = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + encodeFolder;
             const response = await fetch(apiUrl, {
                 method: 'GET',
                 headers: REQ_HEADERS,
-                mode: 'cors'
+                mode: 'cors',
+                credentials: 'omit'
             });
             if (response.status === 404) return 1;
-            if (response.status === 401) throw new Error('Token无效/非HYQY2012账号生成/令牌已过期');
-            if (response.status === 403) throw new Error('Token未勾选repo全权限/令牌被限制');
-            if (!response.ok) throw new Error('获取目录失败：' + response.status);
+            if (response.status === 401) throw new Error('401鉴权失败：Token无效/非HYQY2012账号/令牌过期/前后有空格');
+            if (response.status === 403) throw new Error('403权限拒绝：Token未勾选repo全权限/令牌被限制');
+            if (!response.ok) throw new Error('请求失败，状态码：' + response.status);
             const files = await response.json();
             const pageNums = files.filter(item => item.type === 'dir' && /^page_\d+$/.test(item.name)).map(item => parseInt(item.name.split('_')[1])).filter(num => !isNaN(num));
             return pageNums.length ? Math.max(...pageNums) + 1 : 1;
         }
 
-        // 标准Base64编码，兼容所有字符
         function toBase64(str) {
             return btoa(unescape(encodeURIComponent(str)));
         }
@@ -212,7 +210,6 @@
             const userFolder = userFolderInput.value.trim().replace(/[\/\\:*?"<>|]/g, '');
             const mdContent = mdContentInput.value.trim() || '# ' + userFolder + ' - page_* \n\n这是HHAT自动生成的Markdown文件';
 
-            // 前端前置校验，提前拦截明显错误
             if (!userFolder) {
                 result.className = 'result error';
                 result.innerText = '请输入文件夹名称（英文/数字/下划线）';
@@ -223,13 +220,12 @@
                 result.innerText = '文件夹名称不能超过20个字符';
                 return;
             }
-            if (!TOKEN || TOKEN.length < 40 || !TOKEN.startsWith('ghp_')) {
+            if (!TOKEN || TOKEN.length !== 40 || !TOKEN.startsWith('ghp_')) {
                 result.className = 'result error';
-                result.innerText = '请填写ghp_开头的40位有效PAT令牌';
+                result.innerText = '请配置有效PAT：ghp_开头，严格40位字符';
                 return;
             }
 
-            // 初始化上传状态
             uploadBtn.disabled = true;
             progress.style.display = 'block';
             progressBar.style.width = '20%';
@@ -240,20 +236,21 @@
                 progressBar.style.width = '30%';
                 const nextPageNum = await getNextPageNum(userFolder);
                 const pageFolder = 'page_' + nextPageNum;
-                const filePath = userFolder + '/' + pageFolder + '/index.md';
+                let filePath = userFolder + '/' + pageFolder + '/index.md';
+                filePath = encodeURIComponent(filePath).replace(/%20/g, '+');
                 progressBar.style.width = '50%';
 
                 const base64Content = toBase64(mdContent);
                 progressBar.style.width = '70%';
-                const uploadUrl = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + encodeURIComponent(filePath);
+                const uploadUrl = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + filePath;
 
-                // 上传请求：与GET请求配置一致，杜绝鉴权不一致
                 const uploadRes = await fetch(uploadUrl, {
                     method: 'PUT',
                     headers: REQ_HEADERS,
                     mode: 'cors',
+                    credentials: 'omit',
                     body: JSON.stringify({
-                        message: 'HHAT上传：' + filePath,
+                        message: 'HHAT上传：' + userFolder + '/' + pageFolder,
                         content: base64Content,
                         branch: GITHUB_BRANCH
                     })
@@ -263,7 +260,7 @@
                 if (uploadRes.ok) {
                     progressBar.style.width = '100%';
                     result.className = 'result success';
-                    result.innerText = '上传成功！\n文件路径：' + filePath + '\n访问链接：' + data.content.html_url;
+                    result.innerText = '上传成功！\n文件路径：' + userFolder + '/' + pageFolder + '/index.md\n访问链接：' + data.content.html_url;
                     userFolderInput.value = '';
                     mdContentInput.value = '';
                 } else {
@@ -278,7 +275,6 @@
             }
         });
 
-        // 输入框清空错误提示
         [userFolderInput, mdContentInput].forEach(input => {
             input.addEventListener('input', () => {
                 result.innerText = '';
