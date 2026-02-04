@@ -1,79 +1,306 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <title>HHAT Upload</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HHAT 上传</title>
+    <link rel="icon" href="https://www.xn--vqq068m4ham0n.space/img/logo.svg">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        body {
+            background: #f8f8f8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 24px;
+        }
+        .upload-box {
+            background: #fff;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            width: 100%;
+            max-width: 600px;
+        }
+        .upload-box h2 {
+            color: #333;
+            margin-bottom: 24px;
+            font-size: 24px;
+            text-align: center;
+        }
+        .upload-box h2 span {
+            color: #DE0000;
+        }
+        .form-item {
+            margin-bottom: 20px;
+        }
+        .form-item label {
+            display: block;
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        .form-item input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            font-size: 14px;
+            outline: none;
+            transition: border 0.3s ease;
+        }
+        .form-item input:focus {
+            border-color: #DE0000;
+        }
+        .form-item textarea {
+            width: 100%;
+            height: 120px;
+            padding: 12px 16px;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            font-size: 14px;
+            outline: none;
+            resize: vertical;
+            transition: border 0.3s ease;
+            line-height: 1.5;
+        }
+        .form-item textarea:focus {
+            border-color: #DE0000;
+        }
+        .upload-btn {
+            background: #DE0000;
+            color: #fff;
+            border: none;
+            padding: 14px 0;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        .upload-btn:hover {
+            background: #c20000;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(222,0,0,0.2);
+        }
+        .upload-btn:disabled {
+            background: #f0f0f0;
+            color: #999;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .progress {
+            height: 6px;
+            background: #f0f0f0;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .progress-bar {
+            height: 100%;
+            background: #DE0000;
+            width: 0;
+            transition: width 0.3s ease;
+        }
+        .result {
+            font-size: 14px;
+            min-height: 24px;
+            text-align: center;
+            line-height: 1.5;
+            word-break: break-all;
+            padding: 0 10px;
+        }
+        .success {
+            color: #00b42a;
+        }
+        .error {
+            color: #DE0000;
+        }
+        .tip {
+            font-size: 12px;
+            color: #999;
+            line-height: 1.5;
+            text-align: center;
+            margin-top: 10px;
+        }
+        @media (max-width: 480px) {
+            .upload-box {
+                padding: 24px;
+            }
+            .upload-box h2 {
+                font-size: 20px;
+            }
+        }
+    </style>
 </head>
 <body>
-  <input id="userFolder" placeholder="英文文件夹名" value="test123">
-  <button onclick="doUpload()">上传</button>
-  <div id="result"></div>
+    <div class="upload-box">
+        <h2>HHAT <span>文件上传</span></h2>
+        <div class="form-item">
+            <label for="userFolder">用户文件夹名称（一级目录）</label>
+            <input type="text" id="userFolder" placeholder="请输入英文/数字/下划线，如：user1、test123">
+        </div>
+        <div class="form-item">
+            <label for="mdContent">index.md 内容编辑</label>
+            <textarea id="mdContent" placeholder="请输入markdown内容，如：# 标题&#10;## 子标题&#10;这是内容..."></textarea>
+        </div>
+        <div class="progress" id="progress">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <button class="upload-btn" id="uploadBtn">上传至 GitHub /HYQY2012/Data</button>
+        <div class="result" id="result"></div>
+        <p class="tip">上传路径：用户文件夹 → page_n → index.md<br>自动生成自增page_n，支持Markdown语法<br>仅支持英文/数字/下划线，避免中文异常</p>
+    </div>
 
-  <script>
-    // ########## 只改这里 ##########
-    const GITHUB_TOKEN = "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";
-    const OWNER = "HYQY2012";
-    const REPO = "Data";
+    <script>
+        const userFolderInput = document.getElementById('userFolder');
+        const mdContentInput = document.getElementById('mdContent');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const progress = document.getElementById('progress');
+        const progressBar = document.getElementById('progressBar');
+        const result = document.getElementById('result');
 
-    const headers = {
-      "Authorization": "token " + GITHUB_TOKEN,
-      "Accept": "application/vnd.github.v3+json"
-    };
+        const GITHUB_TOKEN = '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';
+        const GITHUB_OWNER = 'HYQY2012';
+        const GITHUB_REPO = 'Data';
+        const GITHUB_BRANCH = 'main';
 
-    async function doUpload() {
-      const r = document.getElementById("result");
-      const folder = document.getElementById("userFolder").value.trim();
-      r.textContent = "加载中...";
+        const TOKEN = GITHUB_TOKEN.trim();
+        const REQ_HEADERS = {
+            'Authorization': 'token ' + TOKEN,
+            'Accept': 'application/vnd.github.v3+json'
+        };
 
-      try {
-        // 1. 先验证仓库（你已经200）
-        const repoRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}`, {
-          method: "GET",
-          headers,
-          mode: "cors",
-          credentials: "omit"
-        });
-        console.log("仓库验证状态:", repoRes.status); // 必200
-
-        // 2. 拿目录页数
-        const listRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${folder}`, {
-          method: "GET",
-          headers,
-          mode: "cors",
-          credentials: "omit"
-        });
-
-        let pageNum = 1;
-        if (listRes.status === 200) {
-          const files = await listRes.json();
-          const pages = files
-            .filter(i => i.type === "dir" && /^page_\d+$/.test(i.name))
-            .map(i => parseInt(i.name.split("_")[1]))
-            .filter(n => !isNaN(n));
-          if (pages.length) pageNum = Math.max(...pages) + 1;
+        async function getNextPageNum(userFolder) {
+            const encodeFolder = encodeURIComponent(userFolder);
+            const apiUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${encodeFolder}`;
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: REQ_HEADERS,
+                    mode: 'cors',
+                    credentials: 'omit'
+                });
+                if (response.status === 404) return 1;
+                if (!response.ok) throw new Error(`获取目录失败，状态码：${response.status}`);
+                const files = await response.json();
+                const pageNums = files.filter(item => 
+                    item.type === 'dir' && /^page_\d+$/.test(item.name)
+                ).map(item => 
+                    parseInt(item.name.split('_')[1])
+                ).filter(num => !isNaN(num));
+                return pageNums.length ? Math.max(...pageNums) + 1 : 1;
+            } catch (err) {
+                throw new Error(`获取页码失败：${err.message}`);
+            }
         }
 
-        // 3. 上传
-        const path = `${folder}/page_${pageNum}/index.md`;
-        const content = btoa(unescape(encodeURIComponent(`# ${folder} page ${pageNum}\n上传成功`)));
+        function toBase64(str) {
+            try {
+                return btoa(unescape(encodeURIComponent(str || '')));
+            } catch (e) {
+                throw new Error('内容编码失败，请勿使用特殊字符');
+            }
+        }
 
-        const uploadRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}`, {
-          method: "PUT",
-          headers,
-          mode: "cors",
-          credentials: "omit",
-          body: JSON.stringify({
-            message: `upload ${path}`,
-            content: content
-          })
+        function resetUploadState() {
+            uploadBtn.disabled = false;
+            progress.style.display = 'none';
+            progressBar.style.width = '0';
+        }
+
+        uploadBtn.onclick = async function() {
+            result.className = 'result';
+            result.innerText = '';
+            uploadBtn.disabled = true;
+            progress.style.display = 'block';
+            progressBar.style.width = '20%';
+
+            const userFolder = userFolderInput.value.trim().replace(/[\/\\:*?"<>|]/g, '');
+            let mdContent = mdContentInput.value.trim();
+            if (!mdContent) mdContent = `# ${userFolder}\n这是自动生成的Markdown文件`;
+
+            if (!userFolder) {
+                result.className = 'result error';
+                result.innerText = '请输入文件夹名称（仅英文/数字/下划线）';
+                resetUploadState();
+                return;
+            }
+            if (userFolder.length > 20) {
+                result.className = 'result error';
+                result.innerText = '文件夹名称不能超过20个字符';
+                resetUploadState();
+                return;
+            }
+            if (!TOKEN || TOKEN.length !== 40 || !TOKEN.startsWith('ghp_')) {
+                result.className = 'result error';
+                result.innerText = 'Token格式错误：ghp_开头，严格40位字符';
+                resetUploadState();
+                return;
+            }
+
+            try {
+                progressBar.style.width = '30%';
+                const nextPageNum = await getNextPageNum(userFolder);
+                const pageFolder = `page_${nextPageNum}`;
+                progressBar.style.width = '50%';
+
+                const base64Content = toBase64(mdContent);
+                progressBar.style.width = '70%';
+                const filePath = `${userFolder}/${pageFolder}/index.md`;
+                const encodeFilePath = encodeURIComponent(filePath);
+                const uploadUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${encodeFilePath}`;
+
+                const uploadRes = await fetch(uploadUrl, {
+                    method: 'PUT',
+                    headers: REQ_HEADERS,
+                    mode: 'cors',
+                    credentials: 'omit',
+                    body: JSON.stringify({
+                        message: `HHAT上传：${filePath}`,
+                        content: base64Content,
+                        branch: GITHUB_BRANCH
+                    })
+                });
+
+                const data = await uploadRes.json();
+                progressBar.style.width = '100%';
+                if (uploadRes.ok) {
+                    result.className = 'result success';
+                    result.innerText = `上传成功！\n文件路径：${filePath}\n访问链接：${data.content.html_url}`;
+                    userFolderInput.value = '';
+                    mdContentInput.value = '';
+                } else {
+                    throw new Error(data.message || `上传失败，状态码：${uploadRes.status}`);
+                }
+            } catch (err) {
+                result.className = 'result error';
+                result.innerText = err.message;
+            } finally {
+                setTimeout(() => {
+                    resetUploadState();
+                }, 800);
+            }
+        };
+
+        [userFolderInput, mdContentInput].forEach(input => {
+            input.oninput = function() {
+                result.innerText = '';
+                result.className = 'result';
+            };
         });
-
-        const data = await uploadRes.json();
-        r.textContent = uploadRes.ok ? `成功: ${data.content.html_url}` : `失败: ${data.message}`;
-      } catch (e) {
-        r.textContent = "异常: " + e.message;
-      }
-    }
-  </script>
+    </script>
 </body>
 </html>
