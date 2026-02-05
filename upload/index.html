@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MD 编号生成+上传（API版）</title>
+    <title>MD 编号生成+上传（代理版·零401）</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background: #f5f5f5; padding: 20px; }
@@ -25,129 +25,64 @@
 </head>
 <body>
     <div class="container">
-        <h1 class="title">MD 文件编号生成器<br/><small style="font-size:14px; color:#666">仅上传至 md data 目录</small></h1>
+        <h1 class="title">MD 文件编号生成器<br/><small style="font-size:14px; color:#666">仅上传至 md data 目录 · 零401版</small></h1>
         <button class="btn" id="generateBtn">生成下一个 MD 文件名</button>
         <div class="result" id="result">点击上方按钮，生成自增MD文件名（index_0001.md ~ index_9999.md）</div>
-        <p class="tip">生成后可直接复制文件名，或点击「一键上传」跳转到GitHub，自动填充文件名，仅需填写内容即可保存</p>
+        <p class="tip">本地代理服务已屏蔽401问题<br/>生成后一键跳转GitHub，自动填充文件名，仅填内容即可保存</p>
     </div>
 
     <script>
-        // ########## 仅需修改这一行！！！ ##########
-        const GITHUB_TOKEN = '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';
-        // 固定配置（无需修改）
-        const CONFIG = {
-            owner: 'HYQY2012',
-            repo: 'Data',
-            path: 'md data', // 目标目录，固定不变
-            prefix: 'index_',
-            suffix: '.md',
-            numLength: 4,
-            maxNum: 9999
-        };
-
         // 全局元素
         const generateBtn = document.getElementById('generateBtn');
         const resultEl = document.getElementById('result');
+        // 本地代理接口（固定，不用改）
+        const PROXY_API = 'http://localhost:3000/get-next-md';
 
-        // 请求头（GitHub官方推荐Bearer鉴权，跨域兼容拉满）
-        const REQ_HEADERS = {
-            'Authorization': `Bearer ${GITHUB_TOKEN.trim()}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'X-GitHub-Api-Version': '2022-11-28'
-        };
-
-        // 1. 获取已存在的MD文件编号
-        async function getExistingNumbers() {
-            const encodePath = encodeURIComponent(CONFIG.path);
-            const apiUrl = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${encodePath}`;
-            const response = await fetch(apiUrl, {
-                method: 'GET',
-                headers: REQ_HEADERS,
-                mode: 'cors',
-                credentials: 'omit', // 禁止带Cookie，避免鉴权冲突
-                cache: 'no-store'    // 禁止缓存，保证获取最新文件列表
-            });
-
-            if (!response.ok) throw new Error(`API请求失败 [${response.status}]，请检查Token是否有效`);
-            const contents = await response.json();
-
-            // 筛选index_xxxx.md文件，提取数字编号
-            const reg = new RegExp(`^${CONFIG.prefix}(\\d{${CONFIG.numLength}})${CONFIG.suffix}$`);
-            const numbers = [];
-            contents.forEach(item => {
-                if (item.type === 'file' && reg.test(item.name)) {
-                    const num = parseInt(reg.exec(item.name)[1], 10);
-                    numbers.push(num);
-                }
-            });
-            return numbers;
-        }
-
-        // 2. 生成下一个自增编号
-        function getNextNumber(numbers) {
-            if (numbers.length === 0) return 1;
-            const maxNum = Math.max(...numbers);
-            if (maxNum >= CONFIG.maxNum) throw new Error(`已达最大编号 ${CONFIG.prefix}${CONFIG.maxNum.toString().padStart(4,0)}${CONFIG.suffix}，无法生成`);
-            return maxNum + 1;
-        }
-
-        // 3. 格式化4位编号（0001/0002...）
-        function formatNum(num) {
-            return num.toString().padStart(CONFIG.numLength, '0');
-        }
-
-        // 4. 复制文件名到剪贴板
+        // 复制文件名
         function copyFileName(name) {
-            navigator.clipboard.writeText(name).then(() => {
-                alert(`✅ 已复制：${name}`);
-            }).catch(() => {
-                alert(`❌ 复制失败，请手动复制：${name}`);
-            });
+            navigator.clipboard.writeText(name).then(() => alert(`✅ 已复制：${name}`)).catch(() => alert(`❌ 复制失败，请手动复制：${name}`));
         }
 
-        // 5. 跳转GitHub一键上传页（自动填充文件名）
-        function jumpToUpload(name) {
-            const encodePath = encodeURIComponent(`${CONFIG.path}/${name}`);
-            const uploadUrl = `https://github.com/${CONFIG.owner}/${CONFIG.repo}/new/main/${encodePath}`;
-            window.open(uploadUrl, '_blank'); // 新窗口打开
+        // 一键跳转到GitHub上传页
+        function jumpToUpload(url) {
+            window.open(url, '_blank');
         }
 
-        // 主逻辑：生成文件名
+        // 主逻辑：调用本地代理接口生成文件名
         async function generateFileName() {
-            // 加载状态
             generateBtn.disabled = true;
             resultEl.className = 'result loading';
             resultEl.innerHTML = '正在读取md data目录文件列表...';
 
             try {
-                // 核心步骤：读编号→生新号→格式化
-                const existingNums = await getExistingNumbers();
-                const nextNum = getNextNumber(existingNums);
-                const nextNumStr = formatNum(nextNum);
-                const newFileName = `${CONFIG.prefix}${nextNumStr}${CONFIG.suffix}`;
+                // 只调本地接口，彻底避开GitHub 401
+                const res = await fetch(PROXY_API, {
+                    method: 'GET',
+                    cache: 'no-store'
+                });
+                const data = await res.json();
 
+                if (data.code !== 200) throw new Error(data.msg);
                 // 成功展示
                 resultEl.className = 'result success';
                 resultEl.innerHTML = `
                     生成成功！<br/>
                     下一个MD文件名：
-                    <div class="file-name">${newFileName}</div>
-                    <button class="opt-btn copy" onclick="copyFileName('${newFileName}')">复制文件名</button>
-                    <button class="opt-btn upload" onclick="jumpToUpload('${newFileName}')">一键上传到GitHub</button>
+                    <div class="file-name">${data.fileName}</div>
+                    <button class="opt-btn copy" onclick="copyFileName('${data.fileName}')">复制文件名</button>
+                    <button class="opt-btn upload" onclick="jumpToUpload('${data.uploadUrl}')">一键上传到GitHub</button>
                 `;
             } catch (err) {
                 // 错误展示
                 resultEl.className = 'result error';
                 resultEl.innerHTML = `生成失败：<br/>${err.message}`;
             } finally {
-                // 恢复按钮
                 generateBtn.disabled = false;
             }
         }
 
-        // 绑定点击事件
+        // 绑定事件
         generateBtn.addEventListener('click', generateFileName);
-        // 暴露全局方法（供按钮调用）
         window.copyFileName = copyFileName;
         window.jumpToUpload = jumpToUpload;
     </script>
